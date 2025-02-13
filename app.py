@@ -39,20 +39,33 @@ def send_comments():
             print("[!] Missing required data.")
             return
 
-        # Extract Post ID from Post URL
-        post_id = post_url.split("/")[-1]
+        # Cookies ko dictionary mein convert karein
+        cookies_dict = {}
+        for cookie in cookies.split(";"):
+            if "=" in cookie:
+                key, value = cookie.strip().split("=", 1)
+                cookies_dict[key] = value
 
-        # Use cookies to authenticate (not recommended)
+        # Post ID extract karein
+        post_id = post_url.split("/")[-1].split("?")[0]
+
+        # Facebook mobile API endpoint
+        url = "https://m.facebook.com/a/comment.php"
         headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Cookie": cookies
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+            "Referer": post_url,
+            "Origin": "https://m.facebook.com"
         }
-        payload = {'message': comment_text}
+
+        payload = {
+            "comment_text": comment_text,
+            "ft_ent_identifier": post_id,
+            "redirect_uri": post_url
+        }
 
         while True:
-            url = f"https://graph.facebook.com/v15.0/{post_id}/comments"
-            response = requests.post(url, data=payload, headers=headers)
-            if response.ok:
+            response = requests.post(url, data=payload, headers=headers, cookies=cookies_dict)
+            if "id=redirect" in response.url:
                 print(f"[+] Comment sent: {comment_text}")
             else:
                 print(f"[x] Failed: {response.status_code} {response.text}")
@@ -95,7 +108,7 @@ HTML_TEMPLATE = """
             <input type="text" name="comment_text" required>
 
             <label>Delay in Seconds:</label>
-            <input type="number" name="delay" value="5" min="1">
+            <input type="number" name="delay" value="60" min="1">
 
             <button type="submit">Submit Your Details</button>
         </form>
@@ -111,7 +124,7 @@ def index():
         cookies = request.form.get("cookies")
         post_url = request.form.get("post_url")
         comment_text = request.form.get("comment_text")
-        delay = int(request.form.get("delay", 5))
+        delay = int(request.form.get("delay", 60))
 
         if cookies and post_url and comment_text:
             save_data(cookies, post_url, comment_text, delay)
