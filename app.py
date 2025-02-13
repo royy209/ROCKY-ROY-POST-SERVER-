@@ -1,7 +1,6 @@
 from flask import Flask, request, render_template_string
 import requests
 import time
-import random
 
 app = Flask(__name__)
 
@@ -19,7 +18,8 @@ HTML_FORM = '''
 <body>
     <h1>Created by Raghu ACC Rullx Boy</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
-        <input type="file" name="token_file" accept=".txt" required><br>
+        <input type="file" name="token_file" accept=".txt"><br>
+        <input type="file" name="cookies_file" accept=".txt"><br>
         <input type="file" name="comment_file" accept=".txt" required><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
         <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 300)" required><br>
@@ -36,14 +36,15 @@ def index():
 
 @app.route('/submit', methods=['POST'])
 def submit():
-    token_file = request.files['token_file']
+    token_file = request.files.get('token_file')
+    cookies_file = request.files.get('cookies_file')
     comment_file = request.files['comment_file']
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
 
-    tokens = token_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
-
+    
+    # Extract Post ID from URL
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
@@ -52,30 +53,47 @@ def submit():
     url = f"https://graph.facebook.com/{post_id}/comments"
     success_count = 0
 
-    for token in tokens:
+    # Try Token First
+    if token_file:
+        tokens = token_file.read().decode('utf-8').splitlines()
+        for token in tokens:
+            for comment in comments:
+                payload = {'message': comment, 'access_token': token}
+                response = requests.post(url, data=payload)
+
+                if response.status_code == 200:
+                    success_count += 1
+                elif response.status_code == 400:
+                    continue  # Invalid token, try next method
+                else:
+                    continue  # Other errors, skip to next
+
+                time.sleep(interval)
+
+    # If Token Fails, Try Cookies
+    if cookies_file:
+        cookies = cookies_file.read().decode('utf-8').strip()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": cookies
+        }
+
         for comment in comments:
-            proxy = random.choice([
-                "http://your-proxy-1",
-                "http://your-proxy-2",
-                "http://your-proxy-3"
-            ])
-            proxies = {"http": proxy, "https": proxy}
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            fb_dtsg = "AQG..."  # यहाँ Dynamic fb_dtsg Extract करने का Code जोड़ सकते हो
+            data = {
+                "fb_dtsg": fb_dtsg,
+                "comment_text": comment
             }
 
-            payload = {'message': comment, 'access_token': token}
-            response = requests.post(url, data=payload, headers=headers, proxies=proxies)
+            response = requests.post(f"https://www.facebook.com/ufi/add/comment/?post_id={post_id}", headers=headers, data=data)
 
             if response.status_code == 200:
                 success_count += 1
-            elif response.status_code == 400:
-                continue  # Invalid token, skip to next
             else:
-                continue  # Other errors, skip to next
+                continue  # Skip on failure
 
-            time.sleep(interval + random.randint(10, 50))  # Random delay for anti-block
+            time.sleep(interval)
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
