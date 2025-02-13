@@ -1,41 +1,83 @@
+from flask import Flask, request, render_template_string
 import requests
 import time
+import random
 
-# 🔹 Facebook Post ID & Comment Text
-POST_ID = "pfbid02aWuPV16Xqn7SpcwebC1jFNUYpESeaFvXxnajjUccokkDinvU1C5ar35oEcAt3erol"
-COMMENT_TEXT = "SAMART X3 YASH HERE :-P"
+app = Flask(__name__)
 
-# 🔹 Facebook Cookies (Update with valid cookies)
-COOKIES = {
-    "c_user": "100050801325177",
-    "fr": "0JGTokJ9AZoyrm3JK.AWUvXfj21f_JgI9F2Xd0e8n2iFIWmP85ac0FCA.BnrKhO..AAA.0.0.BnrLpn.AWXjD7JW4Ds",
-    "xs": "25:xxM0FQQMihxoqg:2:1739373161:-1:13215",
-    "locale": "en_GB"
-}
+HTML_FORM = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto Comment - Created by Raghu ACC Rullx</title>
+    <style>
+        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
+        input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
+        button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Created by Raghu ACC Rullx Boy</h1>
+    <form method="POST" action="/submit" enctype="multipart/form-data">
+        <input type="file" name="token_file" accept=".txt" required><br>
+        <input type="file" name="comment_file" accept=".txt" required><br>
+        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
+        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 300)" required><br>
+        <button type="submit">Submit Your Details</button>
+    </form>
+    {% if message %}<p>{{ message }}</p>{% endif %}
+</body>
+</html>
+'''
 
-# 🔹 fb_dtsg Token (Get from Network Tab in Dev Tools)
-FB_DTSG = "अपना_fb_dtsg_डालो"  
+@app.route('/')
+def index():
+    return render_template_string(HTML_FORM)
 
-# 🔹 Comment Function
-def post_comment():
-    url = f"https://m.facebook.com/{POST_ID}/comments"
-    data = {
-        "comment_text": COMMENT_TEXT,
-        "fb_dtsg": FB_DTSG
-    }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10)"
-    }
-    
-    response = requests.post(url, headers=headers, cookies=COOKIES, data=data)
-    
-    if response.status_code == 200:
-        print(f"✅ Comment Successfully Posted on {POST_ID}")
-    else:
-        print(f"❌ Error: {response.status_code} - {response.text}")  # Debugging Logs
+@app.route('/submit', methods=['POST'])
+def submit():
+    token_file = request.files['token_file']
+    comment_file = request.files['comment_file']
+    post_url = request.form['post_url']
+    interval = int(request.form['interval'])
 
-# 🔹 Infinite Loop (400s Delay Between Comments)
-while True:
-    post_comment()
-    print("⏳ Waiting 400 Seconds for Next Comment...")
-    time.sleep(400)  # 400 Seconds Delay
+    tokens = token_file.read().decode('utf-8').splitlines()
+    comments = comment_file.read().decode('utf-8').splitlines()
+
+    try:
+        post_id = post_url.split("posts/")[1].split("/")[0]
+    except IndexError:
+        return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
+
+    url = f"https://graph.facebook.com/{post_id}/comments"
+    success_count = 0
+
+    for token in tokens:
+        for comment in comments:
+            proxy = random.choice([
+                "http://your-proxy-1",
+                "http://your-proxy-2",
+                "http://your-proxy-3"
+            ])
+            proxies = {"http": proxy, "https": proxy}
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            }
+
+            payload = {'message': comment, 'access_token': token}
+            response = requests.post(url, data=payload, headers=headers, proxies=proxies)
+
+            if response.status_code == 200:
+                success_count += 1
+            elif response.status_code == 400:
+                continue  # Invalid token, skip to next
+            else:
+                continue  # Other errors, skip to next
+
+            time.sleep(interval + random.randint(10, 50))  # Random delay for anti-block
+
+    return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
