@@ -1,14 +1,16 @@
 from flask import Flask, request, render_template_string
 import requests
 import time
+import itertools
 
 app = Flask(__name__)
 
+# ✅ HTML फॉर्म
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Auto Comment - Created by Raghu ACC Rullx</title>
+    <title>Facebook Auto Comment - Multi Token & Cookies</title>
     <style>
         body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
         input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
@@ -16,14 +18,14 @@ HTML_FORM = '''
     </style>
 </head>
 <body>
-    <h1>Created by Raghu ACC Rullx Boy</h1>
+    <h1>Facebook Auto Comment - Multi Token & Cookies</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
         <input type="file" name="token_file" accept=".txt"><br>
         <input type="file" name="cookies_file" accept=".txt"><br>
         <input type="file" name="comment_file" accept=".txt" required><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 300)" required><br>
-        <button type="submit">Submit Your Details</button>
+        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 500)" required><br>
+        <button type="submit">Submit</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
@@ -42,9 +44,12 @@ def submit():
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
 
+    # ✅ Data Reading
+    tokens = token_file.read().decode('utf-8').splitlines() if token_file else []
+    cookies_list = cookies_file.read().decode('utf-8').splitlines() if cookies_file else []
     comments = comment_file.read().decode('utf-8').splitlines()
-    
-    # Extract Post ID from URL
+
+    # ✅ Extract Post ID
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
@@ -53,47 +58,48 @@ def submit():
     url = f"https://graph.facebook.com/{post_id}/comments"
     success_count = 0
 
-    # Try Token First
-    if token_file:
-        tokens = token_file.read().decode('utf-8').splitlines()
-        for token in tokens:
-            for comment in comments:
-                payload = {'message': comment, 'access_token': token}
-                response = requests.post(url, data=payload)
+    # ✅ Loops through Tokens and Cookies One by One
+    token_cycle = itertools.cycle(tokens)
+    cookies_cycle = itertools.cycle(cookies_list)
 
-                if response.status_code == 200:
-                    success_count += 1
-                elif response.status_code == 400:
-                    continue  # Invalid token, try next method
-                else:
-                    continue  # Other errors, skip to next
+    for comment in comments:
+        token = next(token_cycle) if tokens else None
+        cookies = next(cookies_cycle) if cookies_list else None
 
-                time.sleep(interval)
-
-    # If Token Fails, Try Cookies
-    if cookies_file:
-        cookies = cookies_file.read().decode('utf-8').strip()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Cookie": cookies
-        }
-
-        for comment in comments:
-            fb_dtsg = "AQG..."  # यहाँ Dynamic fb_dtsg Extract करने का Code जोड़ सकते हो
-            data = {
-                "fb_dtsg": fb_dtsg,
-                "comment_text": comment
-            }
-
-            response = requests.post(f"https://www.facebook.com/ufi/add/comment/?post_id={post_id}", headers=headers, data=data)
+        if token:
+            payload = {'message': comment, 'access_token': token}
+            response = requests.post(url, data=payload)
 
             if response.status_code == 200:
                 success_count += 1
+                print(f"✅ Comment Posted with Token: {comment}")
             else:
-                continue  # Skip on failure
+                print(f"❌ Token Failed, Trying Cookies...")
 
-            time.sleep(interval)
+                if cookies:
+                    cookies_dict = dict(item.split("=") for item in cookies.split("; "))
+                    comment_url = f"https://www.facebook.com/ufi/add/comment/?dpr=1"
+
+                    headers = {
+                        "User-Agent": "Mozilla/5.0",
+                        "Referer": f"https://www.facebook.com/{post_id}",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    }
+
+                    data = {
+                        "ft_ent_identifier": post_id,
+                        "comment_text": comment
+                    }
+
+                    response = requests.post(comment_url, headers=headers, cookies=cookies_dict, data=data)
+
+                    if response.status_code == 200:
+                        success_count += 1
+                        print(f"✅ Comment Posted with Cookies: {comment}")
+                    else:
+                        print(f"❌ Cookies भी फेल हो गई!")
+
+        time.sleep(interval)  # ⏳ Delay for next comment
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
