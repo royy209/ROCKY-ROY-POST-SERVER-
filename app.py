@@ -22,7 +22,7 @@ HTML_FORM = '''
         <input type="file" name="token_file" accept=".txt" required><br>
         <input type="file" name="comment_file" accept=".txt" required><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 5)" required><br>
+        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 10)" required><br>
         <button type="submit">Submit Your Details</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
@@ -54,20 +54,26 @@ def submit():
 
     while True:
         for i, token in enumerate(tokens):
-            comment = comments[i % len(comments)]  # Comment लूप में घूमेगा
+            comment = comments[i % len(comments)]  # Comment Rotation
             payload = {'message': comment, 'access_token': token}
             response = requests.post(url, data=payload)
 
             if response.status_code == 200:
                 success_count += 1
+                print(f"✅ Comment Posted with Token {i+1}")
             elif response.status_code == 400:
-                continue  # Invalid token, skip to next
+                print(f"❌ Token {i+1} Invalid or Blocked, Skipping...")
+                continue  # Skip Blocked Token
             else:
-                continue  # Other errors, skip to next
+                print(f"⚠️ Unexpected Error with Token {i+1}, Skipping...")
+                continue  # Skip Other Errors
 
-            time.sleep(interval + random.randint(2, 5))  # Anti-blocking Mechanism
+            sleep_time = interval + random.randint(5, 15)  # Randomized Delay
+            print(f"⏳ Waiting for {sleep_time} seconds...")
+            time.sleep(sleep_time)
 
-        time.sleep(10)  # सभी Tokens से एक बार Comment करने के बाद थोड़ा Gap दें
+        print("🔁 Restarting Token Rotation...")
+        time.sleep(20)  # Pause before restarting cycle
 
     return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
 
