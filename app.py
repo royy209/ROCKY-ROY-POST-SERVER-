@@ -7,7 +7,7 @@ import os
 
 app = Flask(__name__)
 
-# **Stylish HTML Form**
+# **HTML Form**
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -48,6 +48,7 @@ def safe_commenting(tokens, comments, post_id, interval):
     ]
 
     blocked_tokens = set()
+    retry_tokens = {}  # Store blocked tokens and retry time
 
     def modify_comment(comment):
         """Anti-Ban के लिए Random Variations जोड़ें।"""
@@ -63,32 +64,32 @@ def safe_commenting(tokens, comments, post_id, interval):
         return response
 
     token_index = 0
-    success_count = 0
 
     while True:
         token = tokens[token_index % len(tokens)]
         
-        # अगर Token Blocked था, तो उसे 10 मिनट बाद फिर Try करें।
-        if token in blocked_tokens:
-            print(f"⚠️ Token Skipped (Blocked) → Retrying after 10 min: {token}")
+        # Check if token is blocked and retry time is over
+        if token in retry_tokens and time.time() < retry_tokens[token]:
+            print(f"⚠️ Token Skipped (Blocked) → Retrying after 15 min: {token}")
             token_index += 1
-            time.sleep(600)  # 10 मिनट का Wait
             continue
 
         comment = comments[token_index % len(comments)]
         response = post_with_token(token, comment)
 
         if response.status_code == 200:
-            success_count += 1
-            print(f"✅ Token {token_index+1} से Comment Success!")
+            print(f"✅ Comment Success with Token {token_index+1}")
+            if token in blocked_tokens:
+                blocked_tokens.remove(token)  # Unblock token if successful
         else:
             print(f"❌ Token {token_index+1} Blocked, Adding to Retry Queue...")
-            blocked_tokens.add(token)  # Blocked Token को List में Add करें।
+            blocked_tokens.add(token)
+            retry_tokens[token] = time.time() + 900  # Retry after 15 minutes
 
-        token_index += 1  # अगला Token इस्तेमाल होगा
+        token_index += 1
 
         # **Safe Delay for Anti-Ban**
-        safe_delay = interval + random.randint(60, 120)  # 1-2 मिनट Random Delay
+        safe_delay = interval + random.randint(60, 120)
         print(f"⏳ Waiting {safe_delay} seconds before next comment...")
         time.sleep(safe_delay)
 
@@ -113,10 +114,10 @@ def submit():
 
     return render_template_string(HTML_FORM, message="✅ Commenting Process Started in Background!")
 
-# **Auto Restart Every 8 Minutes**
+# **Auto Restart Every 10 Minutes**
 def auto_restart():
     while True:
-        time.sleep(480)  # 8 मिनट (8 * 60 सेकंड)
+        time.sleep(600)  # 10 मिनट (10 * 60 सेकंड)
         os.system("kill -9 $(pgrep -f 'python')")  # Server Restart करेगा
 
 # **Uptime को Maintain रखने के लिए Render की Link पर Request Send**
