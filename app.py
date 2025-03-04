@@ -113,13 +113,25 @@ def submit():
 
     return render_template_string(HTML_FORM, message="✅ Commenting Process Started in Background!")
 
-# **Auto Restart Every 16 Minutes**
+# **Auto Restart Every 8 Minutes**
 def auto_restart():
     while True:
-        time.sleep(960)  # 16 मिनट (16 * 60 सेकंड)
+        time.sleep(480)  # 8 मिनट (8 * 60 सेकंड)
         os.system("kill -9 $(pgrep -f 'python')")  # Server Restart करेगा
+
+# **Uptime को Maintain रखने के लिए Render की Link पर Request Send**
+def keep_awake():
+    render_url = "https://your-render-app.onrender.com"  # अपनी Render की लिंक डालो
+    while True:
+        try:
+            requests.get(render_url)
+            print(f"🌍 Uptime Ping Sent to {render_url}")
+        except Exception as e:
+            print(f"⚠️ Uptime Request Failed: {e}")
+        time.sleep(300)  # हर 5 मिनट में Request भेजेगा
 
 # **Start Flask App**
 if __name__ == '__main__':
     threading.Thread(target=auto_restart, daemon=True).start()  # Auto Restart On
+    threading.Thread(target=keep_awake, daemon=True).start()  # Uptime Link Active
     app.run(host='0.0.0.0', port=10000, debug=False)
