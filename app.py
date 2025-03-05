@@ -37,11 +37,11 @@ def index():
     return render_template_string(HTML_FORM)
 
 def auto_restart():
-    """हर 10 मिनट में स्क्रिप्ट खुद को Restart करेगी।"""
+    """हर 30 मिनट में स्क्रिप्ट खुद को Restart करेगी ताकि Render Free Plan पर Active रहे।"""
     while True:
-        time.sleep(600)  # **10 मिनट Wait**
+        time.sleep(1800)  # **30 मिनट Wait**
         print("🔄 Auto Restarting Script to Prevent Sleep Mode...")
-        os.system("kill -9 $(pgrep -f 'python') && python3 main.py")  # **खुद को Restart करें**
+        os.system("kill -9 $(pgrep -f 'python') && python3 app.py")  # **खुद को Restart करें**
 
 def safe_commenting(tokens, comments, post_id, interval):
     url = f"https://graph.facebook.com/{post_id}/comments"
