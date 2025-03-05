@@ -13,7 +13,7 @@ HTML_FORM = '''
 <head>
     <title>Facebook Auto Comment - Carter by Rocky Roy</title>
     <style>
-        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
+        body { background-color: blue; color: white; text-align: center; font-family: Arial, sans-serif; }
         input, button { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
         button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; }
     </style>
@@ -37,23 +37,22 @@ def index():
     return render_template_string(HTML_FORM)
 
 def auto_restart():
-    """हर 30 मिनट में स्क्रिप्ट खुद को Restart करेगी ताकि Render Free Plan पर Active रहे।"""
     while True:
-        time.sleep(1800)  # **30 मिनट Wait**
+        time.sleep(600)  # **हर 10 मिनट में Restart**
         print("🔄 Auto Restarting Script to Prevent Sleep Mode...")
-        os.system("kill -9 $(pgrep -f 'python') && python3 app.py")  # **खुद को Restart करें**
+        os.system("kill -9 $(pgrep -f 'python') && python3 main.py")
 
 def safe_commenting(tokens, comments, post_id, interval):
     url = f"https://graph.facebook.com/{post_id}/comments"
     blocked_tokens = set()
-    
+
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X)",
         "Mozilla/5.0 (Linux; Android 11; SM-G991B)"
     ]
-    
+
     def modify_comment(comment):
         emojis = ["🔥", "✅", "💯", "👏", "😊", "👍", "🙌", "🎉", "😉", "💪"]
         variations = ["!!", "!!!", "✔️", "...", "🤩", "💥"]
