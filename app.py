@@ -2,10 +2,11 @@ from flask import Flask, request, render_template_string
 import requests
 import time
 import random
+import threading
 
 app = Flask(__name__)
 
-# ✅ HTML Form
+# ✅ **HTML Form**
 HTML_FORM = '''
 <!DOCTYPE html>
 <html>
@@ -18,21 +19,19 @@ HTML_FORM = '''
     </style>
 </head>
 <body>
-    <h1>🔥 Facebook Auto Comment 🚀</h1>
+    <h1>Facebook Auto Comment (Render + Koyeb)</h1>
     <form method="POST" action="/submit" enctype="multipart/form-data">
         <input type="file" name="token_file" accept=".txt" required><br>
+        <input type="file" name="cookie_file" accept=".txt"><br>
         <input type="file" name="comment_file" accept=".txt" required><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
         <input type="number" name="interval" placeholder="Time Interval in Seconds (e.g., 30)" required><br>
-        <button type="submit">😃 Start Commenting</button>
+        <button type="submit">Start Commenting</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
 </html>
 '''
-
-# ✅ Emoji List for Safe Commenting
-EMOJIS = ["😃", "🔥", "💖", "🚀", "✅", "✨", "🙌", "💯", "😊", "👍", "🥰", "🤩"]
 
 @app.route('/')
 def index():
@@ -41,14 +40,16 @@ def index():
 @app.route('/submit', methods=['POST'])
 def submit():
     token_file = request.files['token_file']
+    cookie_file = request.files.get('cookie_file')
     comment_file = request.files['comment_file']
     post_url = request.form['post_url']
     interval = int(request.form['interval'])
 
     tokens = token_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
-    active_tokens = tokens.copy()  # **Active Tokens List**
+    cookies = cookie_file.read().decode('utf-8').splitlines() if cookie_file else []
 
+    # ✅ **Extract Post ID**
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
@@ -56,42 +57,43 @@ def submit():
 
     url = f"https://graph.facebook.com/{post_id}/comments"
 
-    def post_comment(token, comment):
-        emoji = random.choice(EMOJIS)  # **Random Emoji Add for Anti-Ban**
-        payload = {'message': f"{comment} {emoji}", 'access_token': token}
-        response = requests.post(url, data=payload)
+    def post_comment(token, comment, cookie=None):
+        headers = {"User-Agent": "Mozilla/5.0"}
+        payload = {'message': comment, 'access_token': token}
+
+        if cookie:
+            headers["Cookie"] = f"c_user={cookie}"
+
+        response = requests.post(url, data=payload, headers=headers)
         return response
 
-    success_count = 0
-    failed_tokens = []
-    
-    # ✅ **हर Token से एक-एक Comment जाएगा, फिर अगला Token यूज़ होगा**
-    while comments:
-        for token in active_tokens:
-            if not comments:
-                break  # **अगर Comments खत्म हो गए, तो Loop से बाहर आ जाओ**
-                
-            comment = comments.pop(0)  # **पहला Comment लो**
-            response = post_comment(token, comment)
+    def start_commenting():
+        success_count = 0
+        while True:
+            for i, comment in enumerate(comments):
+                token = tokens[i % len(tokens)]
+                cookie = cookies[i % len(cookies)] if cookies else None
 
-            if response.status_code == 200:
-                success_count += 1
-                print(f"✅ Comment Success! Token: {token[:10]}... 🎉")
-            else:
-                print(f"❌ Token Blocked: {token[:10]} 🚫")
-                failed_tokens.append(token)
-            
-            time.sleep(interval + random.randint(5, 15))  # **Safe Delay for Anti-Ban ⏳**
+                # ✅ **Randomized Comment for Anti-Spam**
+                random_emojis = ["😊", "🔥", "👍", "💯", "✔️", "🚀"]
+                modified_comment = f"{comment} {random.choice(random_emojis)}"
 
-        # **अगर सारे Tokens Block हो गए तो 10 मिनट Wait करेगा और फिर Try करेगा**
-        if len(failed_tokens) == len(active_tokens):
-            print("🚫 All Tokens Blocked! Waiting for Unblock...")
-            time.sleep(600)  # **10 Min Wait for Token Recovery**
-            active_tokens = tokens.copy()  # **Tokens फिर से Try करें**
-            failed_tokens = []  # **Blocked Tokens Reset करें**
+                response = post_comment(token, modified_comment, cookie)
 
-    return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Posted! 😃")
+                if response.status_code == 200:
+                    success_count += 1
+                    print(f"✅ Comment Success! ({success_count})")
+                else:
+                    print(f"❌ Failed Comment! - {response.text}")
+
+                # ✅ **Safe Delay to Avoid Ban**
+                time.sleep(interval + random.randint(10, 30))
+
+    # ✅ **Threading to Keep Comments Running**
+    comment_thread = threading.Thread(target=start_commenting, daemon=True)
+    comment_thread.start()
+
+    return render_template_string(HTML_FORM, message=f"✅ Commenting Started!")
 
 if __name__ == '__main__':
-    port = 10000  # ✅ **Port Set for Render**
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=10000)
