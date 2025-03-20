@@ -2,45 +2,39 @@ from flask import Flask, request, render_template_string
 import requests
 import time
 import random
+import threading
 
 app = Flask(__name__)
 
-# ✅ **Multi User-Agent List**
+# ✅ **Random User-Agents**
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.115 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36",
-]
-
-# ✅ **Proxy List (Optional, if needed)**
-PROXIES = [
-    {"http": "http://proxy1:port", "https": "http://proxy1:port"},
-    {"http": "http://proxy2:port", "https": "http://proxy2:port"},
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/537.36"
 ]
 
 # ✅ **HTML Form**
 HTML_FORM = '''
-<!DOCTYPE html>
 <html>
-<head>
-    <title>Facebook Auto Comment</title>
-    <style>
-        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
-        input, button { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
-        button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <h1>Facebook Auto Comment</h1>
-    <form method="POST" action="/submit" enctype="multipart/form-data">
-        <input type="file" name="token_file" accept=".txt" required><br>
-        <input type="file" name="comment_file" accept=".txt" required><br>
-        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <input type="number" name="interval" placeholder="Time Interval in Seconds (e.g., 30)" required><br>
-        <button type="submit">Start Commenting</button>
-    </form>
-    {% if message %}<p>{{ message }}</p>{% endif %}
-</body>
+    <head>
+        <title>Facebook Auto Comment</title>
+    </head>
+    <body>
+        <h2>Facebook Auto Comment (Multi-Token Handling)</h2>
+        <form action="/submit" method="post" enctype="multipart/form-data">
+            Token File: <input type="file" name="token_file" required><br>
+            Comment File: <input type="file" name="comment_file" required><br>
+            Post URL: <input type="text" name="post_url" required><br>
+            Interval (Seconds): <input type="number" name="interval" value="400" required><br>
+            <input type="submit" value="Start Commenting">
+        </form>
+        <br>
+        {% if message %}
+            <p>{{ message }}</p>
+        {% endif %}
+    </body>
 </html>
 '''
 
@@ -58,63 +52,60 @@ def submit():
     tokens = token_file.read().decode('utf-8').splitlines()
     comments = comment_file.read().decode('utf-8').splitlines()
 
+    if not tokens or not comments:
+        return render_template_string(HTML_FORM, message="❌ Token या Comment File खाली है!")
+
     try:
         post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
         return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
 
     url = f"https://graph.facebook.com/{post_id}/comments"
+    blocked_tokens = set()
 
-    blocked_tokens = set()  # ✅ **Track Blocked Tokens**
-    token_index = 0  # ✅ **Token Sequence**
-    user_agent_index = 0  # ✅ **User-Agent Sequence**
-    proxy_index = 0  # ✅ **Proxy Rotation**
-
-    while True:
-        if token_index >= len(tokens):  # **Reset Token Index**
-            token_index = 0
-            time.sleep(600)  # ✅ **Wait 10 Minutes Before Retrying Blocked Tokens**
-
-        if len(blocked_tokens) == len(tokens):  # **All Tokens Blocked**
-            print("❌ All Tokens Blocked! Retrying in 10 minutes...")
-            time.sleep(600)
-            blocked_tokens.clear()  # ✅ **Unblock Tokens and Retry**
-
-        token = tokens[token_index]
-        if token in blocked_tokens:
-            token_index += 1
-            continue
-
-        comment = random.choice(comments) + " 😊🔥🚀"  # ✅ **Random Emoji with Comment**
-        headers = {"User-Agent": USER_AGENTS[user_agent_index]}  # ✅ **Set User-Agent**
-        proxy = PROXIES[proxy_index] if PROXIES else None  # ✅ **Set Proxy (if available)**
-        
+    def post_comment(token, comment):
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
         payload = {'message': comment, 'access_token': token}
 
-        try:
-            response = requests.post(url, data=payload, headers=headers, proxies=proxy)
-        except requests.exceptions.RequestException:
-            print("⚠️ Proxy Error! Switching Proxy...")
-            proxy_index = (proxy_index + 1) % len(PROXIES)
-            continue
-
-        if response.status_code == 200:
-            print(f"✅ Comment Success! Token {token_index+1}")
-        else:
-            print(f"❌ Token {token_index+1} Blocked!")
-            blocked_tokens.add(token)
-
-        token_index += 1
-        user_agent_index = (user_agent_index + 1) % len(USER_AGENTS)  # ✅ **Rotate User-Agent**
-        proxy_index = (proxy_index + 1) % len(PROXIES)  # ✅ **Rotate Proxy (if needed)**
+        response = requests.post(url, data=payload, headers=headers)
         
-        # ✅ **Randomized Smart Delay**
-        safe_delay = interval + random.randint(5, 15)
-        print(f"⏳ Waiting {safe_delay} seconds before next comment...")
-        time.sleep(safe_delay)
+        if response.status_code == 200:
+            return True, f"✅ Comment Success - {comment}"
+        elif "error" in response.json() and "OAuthException" in response.text:
+            blocked_tokens.add(token)  # Blocked Token को List में Add कर दो
+            return False, f"❌ Token Blocked! Skipping... ({token[:10]}...)"
+        else:
+            return False, f"❌ Failed - {response.text}"
 
-    return render_template_string(HTML_FORM, message="✅ Comments are being posted continuously!")
+    def start_commenting():
+        success_count = 0
+        while True:
+            active_tokens = [t for t in tokens if t not in blocked_tokens]
+            if not active_tokens:
+                print("❌ All Tokens Blocked! Stopping script.")
+                break  # अगर सारे Tokens Block हो जाएँ, तो स्क्रिप्ट बंद हो जाएगी।
+
+            for i, comment in enumerate(comments):
+                token = active_tokens[i % len(active_tokens)]  # हर बार नया Token चुनो
+                
+                # ✅ Comment में Random Emojis Add करो
+                random_emojis = ["😊", "🔥", "👍", "💯", "✔️", "🚀"]
+                modified_comment = f"{comment} {random.choice(random_emojis)}"
+
+                success, log_message = post_comment(token, modified_comment)
+
+                if success:
+                    success_count += 1
+                    print(f"✅ Success ({success_count}): {modified_comment}")
+                else:
+                    print(log_message)
+
+                time.sleep(interval + random.randint(10, 30))  # ✅ Random Delay Add किया
+
+    comment_thread = threading.Thread(target=start_commenting, daemon=True)
+    comment_thread.start()
+
+    return render_template_string(HTML_FORM, message="✅ Commenting Started!")
 
 if __name__ == '__main__':
-    port = 10000  # ✅ **Port Set for Deployment**
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=10000)
