@@ -3,33 +3,18 @@ import requests, threading, time, random
 
 app = Flask(__name__)
 
+# Basic User-Agent List
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
     "Mozilla/5.0 (Linux; Android 10; SM-G975F)",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64)",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0)",
-    "Mozilla/5.0 (Linux; Android 11; Mi 10)",
-    "Mozilla/5.0 (Windows NT 10.0; rv:91.0)",
-    "Mozilla/5.0 (X11; Linux x86_64)",
-    "Mozilla/5.0 (iPad; CPU OS 14_2)",
-    "Mozilla/5.0 (Windows NT 6.3; Win64; x64)",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)",
-    "Mozilla/5.0 (Linux; Android 8.1.0)",
-    "Mozilla/5.0 (Windows NT 5.1)",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:52.0)",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X)",
-    "Mozilla/5.0 (Linux; Android 9; SAMSUNG SM-G973F)",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0)",
-    "Mozilla/5.0 (Macintosh; PPC Mac OS X)",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; rv:78.0)",
-    "Mozilla/5.0 (Linux; Android 10; Nokia 7.2)"
+    "Mozilla/5.0 (Windows NT 6.1; WOW64)",
 ]
 
 EMOJIS = [
     "😂", "😍", "🥰", "😊", "😁", "😉", "😎", "🤩", "😜", "🤪",
     "🤗", "🙃", "😋", "😆", "😝", "😇", "🥳", "🤓", "🧐", "😏",
-    "😅", "😃", "😄", "😺", "😸", "😻", "😽", "🙀", "🐱", "🐯"
 ]
 
 HTML_FORM = '''
@@ -68,56 +53,82 @@ def submit():
         elif "permalink/" in post_url:
             post_id = post_url.split("permalink/")[1].split("/")[0]
         else:
-            post_id = post_url.split("/")[-1].split("?")[0]  # try last part
+            post_id = post_url.split("/")[-1].split("?")[0]
     except:
         return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
 
     blocked_tokens = set()
-    user_agent_index = [0]
 
+    # ===== Function to generate fake random User-Agents =====
+    def generate_random_user_agent():
+        os = random.choice(["Windows", "Macintosh", "Linux", "Android", "iPhone"])
+        version = f"{random.randint(5, 15)}.{random.randint(0, 9)}"
+        return f"Mozilla/5.0 ({os}; CPU {os} OS {version}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.randint(70, 120)}.0.{random.randint(1000,9999)}.100 Safari/537.36"
+
+    # ===== Add 20 new random User-Agents at start =====
+    for _ in range(20):
+        USER_AGENTS.append(generate_random_user_agent())
+
+    # ===== Background thread: add one new random User-Agent every 30 mins =====
     def rotate_user_agent():
         while True:
-            time.sleep(1800)
-            new_agent = "Mozilla/5.0 (Random Agent/" + str(random.randint(1000,9999)) + ")"
+            time.sleep(1800)  # 30 minutes
+            new_agent = generate_random_user_agent()
             USER_AGENTS.append(new_agent)
             print(f"✅ New User-Agent Added: {new_agent}")
 
     threading.Thread(target=rotate_user_agent, daemon=True).start()
 
+    # ===== Main Commenting Loop =====
     def comment_loop():
+        comment_index = 0
+        token_index = 0
+        user_agent_index = 0
+        success_count = 0
+        failed_count = 0
+
         while True:
             active_tokens = [t for t in tokens if t not in blocked_tokens]
             if not active_tokens:
-                print("❌ All Tokens Blocked!")
+                print("❌ All Tokens Blocked! Stopping...")
                 break
 
-            for i in range(len(active_tokens)):
-                token = active_tokens[i]
-                comment = comments[i % len(comments)]
-                emoji = random.choice(EMOJIS)
-                final_comment = f"{comment} {emoji}"
+            token = active_tokens[token_index % len(active_tokens)]
+            comment = comments[comment_index % len(comments)]
+            emoji = random.choice(EMOJIS)
+            final_comment = f"{comment} {emoji}"
 
-                ua = USER_AGENTS[user_agent_index[0] % len(USER_AGENTS)]
-                user_agent_index[0] += 1
+            ua = USER_AGENTS[user_agent_index % len(USER_AGENTS)]
+            headers = {"User-Agent": ua}
 
-                headers = {"User-Agent": ua}
-                comment_payload = {'message': final_comment, 'access_token': token}
-                comment_url = f"https://graph.facebook.com/{post_id}/comments"
+            payload = {
+                'message': final_comment,
+                'access_token': token
+            }
+            comment_url = f"https://graph.facebook.com/{post_id}/comments"
 
-                try:
-                    r = requests.post(comment_url, data=comment_payload, headers=headers)
-                    if r.status_code == 200:
-                        print(f"✅ Comment Done: {final_comment}")
-                    else:
-                        print(f"❌ Comment Failed: {r.text}")
-                        if "OAuthException" in r.text:
-                            blocked_tokens.add(token)
-                except Exception as e:
-                    print(f"❌ Error in Commenting: {e}")
+            try:
+                r = requests.post(comment_url, data=payload, headers=headers)
+                if r.status_code == 200:
+                    success_count += 1
+                    print(f"✅ [{success_count}] [{token[:10]}...] Comment Sent: {final_comment} | UA: {ua[:50]}...")
+                else:
+                    failed_count += 1
+                    print(f"❌ [{failed_count}] [{token[:10]}...] Failed: {r.text}")
+                    if "OAuthException" in r.text:
+                        blocked_tokens.add(token)
+            except Exception as e:
+                failed_count += 1
+                print(f"❌ [{failed_count}] [{token[:10]}...] Error: {e}")
 
-                time.sleep(interval + random.randint(5, 20))
+            token_index += 1
+            comment_index += 1
+            user_agent_index += 1
+
+            time.sleep(interval + random.randint(5, 10))
 
     threading.Thread(target=comment_loop, daemon=True).start()
+
     return render_template_string(HTML_FORM, message="✅ Commenting Started Successfully!")
 
 if __name__ == '__main__':
