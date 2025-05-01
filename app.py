@@ -18,9 +18,9 @@ EMOJIS = [
 
 HTML_FORM = '''
 <html>
-<head><title>Raghu Auto Comment Tool</title></head>
+<head><title>Auto Comment Tool</title></head>
 <body style="background-color:black; color:white;">
-    <h2 style="color:lime;">Created by Raghu ACC Rullx Boy</h2>
+    <h2 style="color:lime;">Facebook Auto Comment Tool</h2>
     <form action="/submit" method="post" enctype="multipart/form-data">
         Token File (.txt): <input type="file" name="token_file" required><br><br>
         Comment File (.txt): <input type="file" name="comment_file" required><br><br>
@@ -38,6 +38,13 @@ HTML_FORM = '''
 @app.route('/')
 def index():
     return render_template_string(HTML_FORM)
+
+def is_internet_available():
+    try:
+        requests.get("https://www.google.com", timeout=5)
+        return True
+    except:
+        return False
 
 @app.route('/submit', methods=['POST'])
 def submit():
@@ -63,7 +70,7 @@ def submit():
         version = f"{random.randint(5, 15)}.{random.randint(0, 9)}"
         return f"Mozilla/5.0 ({os}; CPU {os} OS {version}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.randint(70, 120)}.0.{random.randint(1000,9999)}.100 Safari/537.36"
 
-    for _ in range(20):
+    for _ in range(30):
         USER_AGENTS.append(generate_random_user_agent())
 
     def rotate_user_agent():
@@ -75,20 +82,17 @@ def submit():
 
     threading.Thread(target=rotate_user_agent, daemon=True).start()
 
-    # यह फंक्शन ब्लॉक हुए टोकन को हर 10 मिनट में चेक करता है
     def check_blocked_tokens():
         while True:
-            time.sleep(600)
-            print("♻️ ब्लॉक टोकन को दोबारा चेक किया जा रहा है...")
+            time.sleep(300)
             for token in list(blocked_tokens):
-                test_url = f"https://graph.facebook.com/me?access_token={token}"
                 try:
-                    r = requests.get(test_url)
+                    r = requests.get(f"https://graph.facebook.com/me?access_token={token}")
                     if r.status_code == 200 and 'id' in r.json():
                         blocked_tokens.remove(token)
-                        print(f"✅ टोकन दोबारा एक्टिव: {token[:10]}...")
-                except Exception as e:
-                    print(f"⚠️ चेक एरर: {e}")
+                        print(f"♻️ Token re-activated: {token[:10]}...")
+                except:
+                    pass
 
     threading.Thread(target=check_blocked_tokens, daemon=True).start()
 
@@ -99,58 +103,66 @@ def submit():
         failed_count = 0
 
         while True:
-            active_tokens = [t for t in tokens if t not in blocked_tokens]
-
-            if not active_tokens:
-                print("❌ सभी टोकन ब्लॉक हैं! 10 मिनट बाद फिर से कोशिश होगी...")
-                time.sleep(600)
+            if not is_internet_available():
+                print("❌ No internet. Retrying in 60s...")
+                time.sleep(60)
                 continue
 
-            print(f"\n🔄 नया राउंड: हर टोकन से {round_count} कमेंट")
+            active_tokens = [t for t in tokens if t not in blocked_tokens]
+            random.shuffle(active_tokens)
+
+            if not active_tokens:
+                print("⏳ All tokens blocked. Waiting 5 mins...")
+                time.sleep(300)
+                continue
+
+            print(f"\n▶️ Round {round_count}: Each token will comment once")
 
             for token in active_tokens:
-                for _ in range(round_count):
-                    if not comments:
-                        print("⚠️ कमेंट लिस्ट खाली है!")
-                        break
+                if not comments:
+                    print("⚠️ Comment list is empty!")
+                    break
 
-                    comment = comments[comment_index % len(comments)]
-                    emoji = random.choice(EMOJIS)
-                    final_comment = f"{comment} {emoji}"
+                while not is_internet_available():
+                    print("⚠️ Waiting for internet to return...")
+                    time.sleep(60)
 
-                    ua = random.choice(USER_AGENTS)
-                    headers = {"User-Agent": ua}
+                comment = comments[comment_index % len(comments)]
+                emoji = random.choice(EMOJIS)
+                final_comment = f"{emoji} {comment} {emoji}" if random.random() > 0.5 else f"{comment} {emoji}"
 
-                    payload = {
-                        'message': final_comment,
-                        'access_token': token
-                    }
-                    comment_url = f"https://graph.facebook.com/{post_id}/comments"
+                headers = {"User-Agent": random.choice(USER_AGENTS)}
+                payload = {'message': final_comment, 'access_token': token}
+                comment_url = f"https://graph.facebook.com/{post_id}/comments"
 
-                    try:
-                        r = requests.post(comment_url, data=payload, headers=headers)
-                        if r.status_code == 200:
-                            success_count += 1
-                            print(f"✅ [{success_count}] {token[:10]}... → {final_comment}")
-                        else:
-                            failed_count += 1
-                            print(f"❌ [{failed_count}] {token[:10]}... → Fail: {r.text}")
-                            if "OAuthException" in r.text:
-                                blocked_tokens.add(token)
-                                break
-                    except Exception as e:
+                try:
+                    r = requests.post(comment_url, data=payload, headers=headers)
+                    if r.status_code == 200:
+                        success_count += 1
+                        print(f"✅ [{success_count}] {token[:10]}... → {final_comment}")
+                    else:
                         failed_count += 1
-                        print(f"❌ [{failed_count}] {token[:10]}... → Error: {e}")
-                        break
+                        print(f"❌ [{failed_count}] {token[:10]}... → {r.text}")
+                        if "OAuthException" in r.text:
+                            blocked_tokens.add(token)
+                except Exception as e:
+                    failed_count += 1
+                    print(f"⚠️ [{failed_count}] Error: {e}")
+                    blocked_tokens.add(token)
 
-                    comment_index += 1
-                    time.sleep(interval + random.randint(5, 10))
+                comment_index += 1
+                time.sleep(interval + random.randint(3, 8))
 
             round_count += 1
 
     threading.Thread(target=comment_loop, daemon=True).start()
 
-    return render_template_string(HTML_FORM, message="✅ Auto Commenting चालू हो गया है!")
+    return render_template_string(HTML_FORM, message="✅ Auto Commenting Started!")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    while True:
+        try:
+            app.run(host='0.0.0.0', port=10000)
+        except Exception as e:
+            print(f"❌ Flask crashed: {e}. Restarting in 10s...")
+            time.sleep(10)
