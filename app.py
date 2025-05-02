@@ -46,6 +46,11 @@ def is_internet_available():
     except:
         return False
 
+def generate_random_user_agent():
+    os = random.choice(["Windows", "Macintosh", "Linux", "Android", "iPhone"])
+    version = f"{random.randint(5, 15)}.{random.randint(0, 9)}"
+    return f"Mozilla/5.0 ({os}; CPU {os} OS {version}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.randint(70, 120)}.0.{random.randint(1000,9999)}.100 Safari/537.36"
+
 @app.route('/submit', methods=['POST'])
 def submit():
     tokens = request.files['token_file'].read().decode().splitlines()
@@ -65,20 +70,18 @@ def submit():
 
     blocked_tokens = set()
 
-    def generate_random_user_agent():
-        os = random.choice(["Windows", "Macintosh", "Linux", "Android", "iPhone"])
-        version = f"{random.randint(5, 15)}.{random.randint(0, 9)}"
-        return f"Mozilla/5.0 ({os}; CPU {os} OS {version}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{random.randint(70, 120)}.0.{random.randint(1000,9999)}.100 Safari/537.36"
-
-    for _ in range(30):
-        USER_AGENTS.append(generate_random_user_agent())
-
     def rotate_user_agent():
-        while True:
-            time.sleep(1800)
-            new_agent = generate_random_user_agent()
-            USER_AGENTS.append(new_agent)
-            print(f"✅ New User-Agent Added: {new_agent}")
+        for _ in range(20):
+            USER_AGENTS.append(generate_random_user_agent())
+
+        def add_agent_loop():
+            while True:
+                time.sleep(1800)  # 30 minutes
+                new_agent = generate_random_user_agent()
+                USER_AGENTS.append(new_agent)
+                print(f"✅ New User-Agent Added: {new_agent}")
+
+        threading.Thread(target=add_agent_loop, daemon=True).start()
 
     threading.Thread(target=rotate_user_agent, daemon=True).start()
 
@@ -98,6 +101,7 @@ def submit():
 
     def comment_loop():
         comment_index = 0
+        token_index = 0
         round_count = 1
         success_count = 0
         failed_count = 0
@@ -109,8 +113,6 @@ def submit():
                 continue
 
             active_tokens = [t for t in tokens if t not in blocked_tokens]
-            random.shuffle(active_tokens)
-
             if not active_tokens:
                 print("⏳ All tokens blocked. Waiting 5 mins...")
                 time.sleep(300)
@@ -118,7 +120,14 @@ def submit():
 
             print(f"\n▶️ Round {round_count}: Each token will comment once")
 
-            for token in active_tokens:
+            for _ in range(len(active_tokens)):
+                active_tokens = [t for t in tokens if t not in blocked_tokens]
+                if not active_tokens:
+                    break
+
+                token = active_tokens[token_index % len(active_tokens)]
+                token_index += 1
+
                 if not comments:
                     print("⚠️ Comment list is empty!")
                     break
@@ -143,7 +152,7 @@ def submit():
                     else:
                         failed_count += 1
                         print(f"❌ [{failed_count}] {token[:10]}... → {r.text}")
-                        if "OAuthException" in r.text:
+                        if "OAuthException" in r.text or "error" in r.text:
                             blocked_tokens.add(token)
                 except Exception as e:
                     failed_count += 1
